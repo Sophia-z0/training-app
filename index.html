@@ -759,9 +759,7 @@ function renderLocRow(){
 function setLoc(loc){
   const s=dayState(currentDay);
   s.location=loc;
-  // Reset exercises that may not be available
   // Remove bonus exercises not available at new location
-  const s=dayState(currentDay);
   const validBonus=loc==='gym'?BONUS_GYM:BONUS_HOME;
   if(s.bonusExs) s.bonusExs=s.bonusExs.filter(ex=>validBonus.includes(ex));
   renderLocRow();buildCpdPills();buildAccPills();renderPatternCards();renderBonus();
