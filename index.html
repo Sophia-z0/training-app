@@ -270,9 +270,14 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);font-size:14
     <div class="hdr-title">7 Movement Patterns</div>
     <div class="hdr-sub">Training Planner</div>
   </div>
-  <button class="sync-btn" onclick="manualSync()">
-    <span class="sync-dot" id="sync-dot"></span><span id="sync-label">Sync</span>
-  </button>
+  <div style="display:flex;gap:6px;align-items:center">
+    <button class="sync-btn" onclick="pullAndRefresh()" id="pull-btn">
+      ↓ <span id="pull-label">Charger</span>
+    </button>
+    <button class="sync-btn" onclick="manualSync()">
+      <span class="sync-dot" id="sync-dot"></span><span id="sync-label">Sync</span>
+    </button>
+  </div>
 </header>
 
 <nav class="tabs">
@@ -602,6 +607,46 @@ async function sbGet(id){
   if(!res.ok) return null;
   const rows = await res.json();
   return rows&&rows[0]&&rows[0].data ? JSON.parse(rows[0].data) : null;
+}
+async function pullAndRefresh(){
+  if(!supabaseUrl||!supabaseKey){
+    document.getElementById('pull-label').textContent='Config?';
+    setTimeout(()=>document.getElementById('pull-label').textContent='Charger',2000);
+    return;
+  }
+  document.getElementById('pull-label').textContent='...';
+  try{
+    // Pull sessions
+    const remoteSess=await sbGet(1);
+    if(remoteSess){
+      const local=getSessions();
+      saveSessions(mergeSessionArrays(local,remoteSess));
+    }
+    // Pull week plan
+    const remote=await sbGet(2);
+    if(remote){
+      const key=currentWeekKey();
+      const local=JSON.parse(localStorage.getItem('7pat-weekplan')||'{}');
+      const merged={...local,...remote};
+      localStorage.setItem('7pat-weekplan',JSON.stringify(merged));
+      if(remote[key]){
+        weekPlan=remote[key];
+        buildDayStrip();
+        renderDayPlanner();
+        toast('Plan de la semaine chargé ✓');
+      } else {
+        toast('Aucun plan trouvé pour cette semaine.');
+      }
+    } else {
+      toast('Aucune donnée distante trouvée.');
+    }
+    document.getElementById('pull-label').textContent='✓';
+    setTimeout(()=>document.getElementById('pull-label').textContent='Charger',2000);
+  }catch(e){
+    document.getElementById('pull-label').textContent='Erreur';
+    setTimeout(()=>document.getElementById('pull-label').textContent='Charger',2000);
+    console.warn('pullAndRefresh error',e);
+  }
 }
 async function pushWeekPlan(){
   if(!supabaseUrl||!supabaseKey) return;
