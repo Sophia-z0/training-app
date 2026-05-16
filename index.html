@@ -961,7 +961,7 @@ function renderPatternCards(){
     } else {
       const savedEx=Array.isArray(s.exercises[id])?s.exercises[id][0]:null;
       const optsEx=exList.map(e=>`<option value="${e}"${e===savedEx?' selected':''}>${e}</option>`).join('');
-      body+=`<div class="acc-ex-row"><select id="ex-${id}" onchange="checkBilateral('${id}','acc')">${optsEx}</select></div>`;
+      body+=`<div class="acc-ex-row"><select id="ex-${id}" onchange="saveExerciseChoice('${id}','acc',this.value)">${optsEx}</select></div>`;
       body+=buildSetsHtml(id,'acc',defSets,false);
     }
 
@@ -994,7 +994,7 @@ function buildSubExBlock(patId,idx,opts,defSets,savedEx){
   return `<div class="sub-ex" id="subex-${patId}-${idx}">
     <div class="sub-ex-head">
       <span class="sub-ex-lbl">Ex. ${idx+1}</span>
-      <select id="ex-${patId}-${idx}" onchange="checkBilateral('${patId}',${idx})">${opts}</select>
+      <select id="ex-${patId}-${idx}" onchange="saveExerciseChoice('${patId}',${idx},this.value)">${opts}</select>
       ${idx>=2?`<button class="rm-btn" onclick="removeSubEx('${patId}',${idx})">×</button>`:''}
     </div>
     <div id="bilateral-wrap-${patId}-${idx}"></div>
@@ -1065,6 +1065,22 @@ function refreshSetsGrid(patId,suffix){
   const n=parseInt(document.getElementById('sets-'+patId)?.value)||3;
   const bil=p&&isBilateral(p,exName);
   grid.innerHTML=setsRowsHtml(patId,String(suffix),n,bil);
+}
+function savePlanState(){
+  saveWeekPlan();
+  if(supabaseUrl) pushWeekPlan();
+}
+function saveExerciseChoice(patId,suffix,val){
+  const s=dayState(currentDay);
+  if(suffix==='acc'){
+    s.exercises[patId]=[val];
+  } else {
+    if(!Array.isArray(s.exercises[patId])) s.exercises[patId]=[];
+    s.exercises[patId][suffix]=val;
+  }
+  saveWeekPlan();
+  if(supabaseUrl) pushWeekPlan();
+  checkBilateral(patId,suffix);
 }
 function checkBilateral(patId,suffix){
   // Simplified: just refresh the sets grid with bilateral detection
