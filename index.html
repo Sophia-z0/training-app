@@ -533,27 +533,11 @@ async function manualSync(){
     // Push local sessions to Supabase
     const sessions=getSessions();
     // Upsert all sessions as one row with key 'all'
-    const res=await fetch(`${supabaseUrl}/rest/v1/sessions?id=eq.1`,{
-      method:'PATCH',
-      headers:{'Content-Type':'application/json','apikey':supabaseKey,'Authorization':'Bearer '+supabaseKey,'Prefer':'return=representation'},
-      body:JSON.stringify({data:JSON.stringify(sessions)})
-    });
-    if(res.status===404||res.status===0){
-      // Insert
-      await fetch(`${supabaseUrl}/rest/v1/sessions`,{
-        method:'POST',
-        headers:{'Content-Type':'application/json','apikey':supabaseKey,'Authorization':'Bearer '+supabaseKey},
-        body:JSON.stringify({id:1,data:JSON.stringify(sessions)})
-      });
-    }
-    // Pull
-    const pull=await fetch(`${supabaseUrl}/rest/v1/sessions?id=eq.1&select=data`,{
-      headers:{'apikey':supabaseKey,'Authorization':'Bearer '+supabaseKey}
-    });
-    const rows=await pull.json();
-    if(rows&&rows[0]&&rows[0].data){
-      const remote=JSON.parse(rows[0].data);
-      // Merge: keep newer
+    // Upsert sessions
+    await sbUpsert(1, sessions);
+    // Pull remote sessions and merge
+    const remote = await sbGet(1);
+    if(remote){
       const merged=mergeSessionArrays(sessions,remote);
       saveSessions(merged);
     }
@@ -597,42 +581,49 @@ function currentWeekKey(){
   const mon=new Date(now);mon.setDate(now.getDate()-dow+1);
   return mon.toISOString().slice(0,10);
 }
+async function sbUpsert(id, data){
+  // True upsert: POST with onConflict=id
+  const res = await fetch(`${supabaseUrl}/rest/v1/sessions`,{
+    method:'POST',
+    headers:{
+      'Content-Type':'application/json',
+      'apikey':supabaseKey,
+      'Authorization':'Bearer '+supabaseKey,
+      'Prefer':'resolution=merge-duplicates,return=representation'
+    },
+    body:JSON.stringify({id, data:JSON.stringify(data)})
+  });
+  return res;
+}
+async function sbGet(id){
+  const res = await fetch(`${supabaseUrl}/rest/v1/sessions?id=eq.${id}&select=data`,{
+    headers:{'apikey':supabaseKey,'Authorization':'Bearer '+supabaseKey}
+  });
+  if(!res.ok) return null;
+  const rows = await res.json();
+  return rows&&rows[0]&&rows[0].data ? JSON.parse(rows[0].data) : null;
+}
 async function pushWeekPlan(){
   if(!supabaseUrl||!supabaseKey) return;
-  const key=currentWeekKey();
   const all=JSON.parse(localStorage.getItem('7pat-weekplan')||'{}');
-  try{
-    const res=await fetch(`${supabaseUrl}/rest/v1/sessions?id=eq.2`,{
-      method:'PATCH',
-      headers:{'Content-Type':'application/json','apikey':supabaseKey,'Authorization':'Bearer '+supabaseKey,'Prefer':'return=representation'},
-      body:JSON.stringify({data:JSON.stringify(all)})
-    });
-    if(res.status===404||res.status===0||res.status===406){
-      await fetch(`${supabaseUrl}/rest/v1/sessions`,{
-        method:'POST',
-        headers:{'Content-Type':'application/json','apikey':supabaseKey,'Authorization':'Bearer '+supabaseKey},
-        body:JSON.stringify({id:2,data:JSON.stringify(all)})
-      });
-    }
-  }catch(e){}
+  try{ await sbUpsert(2, all); }catch(e){ console.warn('pushWeekPlan error',e); }
 }
 async function pullWeekPlan(){
   if(!supabaseUrl||!supabaseKey) return;
   try{
-    const res=await fetch(`${supabaseUrl}/rest/v1/sessions?id=eq.2&select=data`,{
-      headers:{'apikey':supabaseKey,'Authorization':'Bearer '+supabaseKey}
-    });
-    const rows=await res.json();
-    if(rows&&rows[0]&&rows[0].data){
-      const remote=JSON.parse(rows[0].data);
-      const key=currentWeekKey();
-      // Merge remote into local, remote wins for week plan
-      const local=JSON.parse(localStorage.getItem('7pat-weekplan')||'{}');
-      const merged={...local,...remote};
-      localStorage.setItem('7pat-weekplan',JSON.stringify(merged));
-      if(remote[key]){weekPlan=remote[key];renderDayPlanner();buildDayStrip();}
+    const remote = await sbGet(2);
+    if(!remote) return;
+    const key=currentWeekKey();
+    // Merge: remote week plan wins (it's the source of truth for planning)
+    const local=JSON.parse(localStorage.getItem('7pat-weekplan')||'{}');
+    const merged={...local,...remote};
+    localStorage.setItem('7pat-weekplan',JSON.stringify(merged));
+    if(remote[key]){
+      weekPlan=remote[key];
+      renderDayPlanner();
+      buildDayStrip();
     }
-  }catch(e){}
+  }catch(e){ console.warn('pullWeekPlan error',e); }
 }
 
 // ═══════════════ TABS ═══════════════
