@@ -444,11 +444,22 @@ const PATS = [
     bilateralExs:['Suitcase carry'] },
 ];
 
-const BONUS_EXS = [
-  'Machine abducteurs','Abduction poulie','Marche latérale élastique','Clamshell','Side-lying abduction',
-  'Calf raises','Descente contrôlée','Renfo tibial','Rotation interne épaule','Rotation externe épaule',
+const BONUS_HOME = [
+  'Marche latérale élastique','Clamshell','Side-lying abduction',
+  'Calf raises','Descente contrôlée','Renfo tibial',
+  'Rotation interne épaule','Rotation externe épaule',
   'Band pull-apart','Push-up scapulaire','Traction scapulaire'
 ];
+const BONUS_GYM = [
+  'Machine abducteurs','Abduction poulie','Marche latérale élastique','Clamshell','Side-lying abduction',
+  'Calf raises','Descente contrôlée','Renfo tibial',
+  'Rotation interne épaule','Rotation externe épaule',
+  'Band pull-apart','Push-up scapulaire','Traction scapulaire'
+];
+function getBonusExs(){
+  const s=dayState(currentDay);
+  return s.location==='gym'?BONUS_GYM:BONUS_HOME;
+}
 
 // Recommended accessory pairs
 const ACC_RECO = {
@@ -546,6 +557,8 @@ async function manualSync(){
       const merged=mergeSessionArrays(sessions,remote);
       saveSessions(merged);
     }
+    await pushWeekPlan();
+    await pullWeekPlan();
     syncStatus='ok'; updateSyncDot(); toast('Synchronisé ✓');
   }catch(e){syncStatus='err';updateSyncDot();toast('Erreur de sync — données sauvegardées en local.');}
 }
@@ -558,6 +571,69 @@ function mergeSessionArrays(local,remote){
 // ═══════════════ STORAGE ═══════════════
 function getSessions(){try{return JSON.parse(localStorage.getItem('7pat-v3')||'[]');}catch{return[];}}
 function saveSessions(arr){localStorage.setItem('7pat-v3',JSON.stringify(arr));}
+
+// Week plan persistence
+function loadWeekPlan(){
+  try{
+    const saved=JSON.parse(localStorage.getItem('7pat-weekplan')||'{}');
+    // Only load the current ISO week
+    const key=currentWeekKey();
+    if(saved[key]) weekPlan=saved[key];
+  }catch{}
+}
+function saveWeekPlan(){
+  try{
+    const key=currentWeekKey();
+    const all=JSON.parse(localStorage.getItem('7pat-weekplan')||'{}');
+    all[key]=weekPlan;
+    // Keep only last 4 weeks
+    const keys=Object.keys(all).sort().slice(-4);
+    const trimmed={};keys.forEach(k=>trimmed[k]=all[k]);
+    localStorage.setItem('7pat-weekplan',JSON.stringify(trimmed));
+  }catch{}
+}
+function currentWeekKey(){
+  const now=new Date();const dow=now.getDay()||7;
+  const mon=new Date(now);mon.setDate(now.getDate()-dow+1);
+  return mon.toISOString().slice(0,10);
+}
+async function pushWeekPlan(){
+  if(!supabaseUrl||!supabaseKey) return;
+  const key=currentWeekKey();
+  const all=JSON.parse(localStorage.getItem('7pat-weekplan')||'{}');
+  try{
+    const res=await fetch(`${supabaseUrl}/rest/v1/sessions?id=eq.2`,{
+      method:'PATCH',
+      headers:{'Content-Type':'application/json','apikey':supabaseKey,'Authorization':'Bearer '+supabaseKey,'Prefer':'return=representation'},
+      body:JSON.stringify({data:JSON.stringify(all)})
+    });
+    if(res.status===404||res.status===0||res.status===406){
+      await fetch(`${supabaseUrl}/rest/v1/sessions`,{
+        method:'POST',
+        headers:{'Content-Type':'application/json','apikey':supabaseKey,'Authorization':'Bearer '+supabaseKey},
+        body:JSON.stringify({id:2,data:JSON.stringify(all)})
+      });
+    }
+  }catch(e){}
+}
+async function pullWeekPlan(){
+  if(!supabaseUrl||!supabaseKey) return;
+  try{
+    const res=await fetch(`${supabaseUrl}/rest/v1/sessions?id=eq.2&select=data`,{
+      headers:{'apikey':supabaseKey,'Authorization':'Bearer '+supabaseKey}
+    });
+    const rows=await res.json();
+    if(rows&&rows[0]&&rows[0].data){
+      const remote=JSON.parse(rows[0].data);
+      const key=currentWeekKey();
+      // Merge remote into local, remote wins for week plan
+      const local=JSON.parse(localStorage.getItem('7pat-weekplan')||'{}');
+      const merged={...local,...remote};
+      localStorage.setItem('7pat-weekplan',JSON.stringify(merged));
+      if(remote[key]){weekPlan=remote[key];renderDayPlanner();buildDayStrip();}
+    }
+  }catch(e){}
+}
 
 // ═══════════════ TABS ═══════════════
 function switchTab(t){
@@ -669,6 +745,7 @@ function setDur(val){
   const maxAcc=s.duration===60?4:2;
   if(s.type==='training') s.accessories=s.accessories.slice(0,maxAcc);
   renderDayPlanner();buildDayStrip();
+  saveWeekPlan();if(supabaseUrl)pushWeekPlan();
 }
 
 // ═══════════════ LOCATION ═══════════════
@@ -683,7 +760,12 @@ function setLoc(loc){
   const s=dayState(currentDay);
   s.location=loc;
   // Reset exercises that may not be available
-  renderLocRow();buildCpdPills();buildAccPills();renderPatternCards();
+  // Remove bonus exercises not available at new location
+  const s=dayState(currentDay);
+  const validBonus=loc==='gym'?BONUS_GYM:BONUS_HOME;
+  if(s.bonusExs) s.bonusExs=s.bonusExs.filter(ex=>validBonus.includes(ex));
+  renderLocRow();buildCpdPills();buildAccPills();renderPatternCards();renderBonus();
+  saveWeekPlan();if(supabaseUrl)pushWeekPlan();
 }
 
 function getExList(p,loc){return loc==='gym'?p.gym:p.home;}
@@ -737,6 +819,7 @@ function rollDice(){
   });
 
   buildCpdPills();buildAccPills();renderPatternCards();
+  saveWeekPlan();if(supabaseUrl)pushWeekPlan();
   toast('Sélection aléatoire effectuée 🎲');
 }
 
@@ -772,6 +855,7 @@ function toggleCpd(id){
     s.accessories=reco.filter(id=>!getUsedCompounds().has(id)).slice(0,maxAcc);
   }
   buildCpdPills();buildAccPills();renderPatternCards();
+  saveWeekPlan();if(supabaseUrl)pushWeekPlan();
 }
 
 // ═══════════════ ACCESSORY PILLS ═══════════════
@@ -793,6 +877,7 @@ function toggleAcc(id){
   if(s.accessories.includes(id)) s.accessories=s.accessories.filter(x=>x!==id);
   else if(s.accessories.length<maxAcc) s.accessories.push(id);
   buildAccPills();renderPatternCards();
+  saveWeekPlan();if(supabaseUrl)pushWeekPlan();
 }
 
 // ═══════════════ BILATERAL DETECTION ═══════════════
@@ -1020,7 +1105,7 @@ function renderBonus(){
   const bonusExs=s.bonusExs||[];
   grid.innerHTML=bonusExs.map((ex,i)=>`
     <div class="bonus-ex-row" id="bonus-row-${i}">
-      <select id="bonus-ex-${i}">${BONUS_EXS.map(e=>`<option value="${e}"${e===ex?' selected':''}>${e}</option>`).join('')}</select>
+      <select id="bonus-ex-${i}">${getBonusExs().map(e=>`<option value="${e}"${e===ex?' selected':''}>${e}</option>`).join('')}</select>
       <button class="rm-btn" onclick="removeBonus(${i})">×</button>
     </div>`).join('');
   const btn=document.getElementById('add-bonus-btn');
@@ -1030,7 +1115,7 @@ function addBonus(){
   const s=dayState(currentDay);
   if(!s.bonusExs) s.bonusExs=[];
   if(s.bonusExs.length>=3) return;
-  s.bonusExs.push(BONUS_EXS[0]);
+  s.bonusExs.push(getBonusExs()[0]);
   renderBonus();
 }
 function removeBonus(i){
@@ -1275,8 +1360,13 @@ function toast(msg){
 
 // ═══════════════ INIT ═══════════════
 initSupabase();
+loadWeekPlan();
 buildDayStrip();
 renderDayPlanner();
+// Auto-pull week plan from Supabase on load
+if(supabaseUrl&&supabaseKey){
+  pullWeekPlan().then(()=>{buildDayStrip();renderDayPlanner();});
+}
 </script>
 </body>
 </html>
