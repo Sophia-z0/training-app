@@ -607,12 +607,18 @@ function renderWeekGrid(){
   let html=`<div class="week-grid" style="grid-template-columns:repeat(${Math.min(cols,4)},1fr);overflow-x:auto">`;
   trainingDays.forEach(d=>{
     const s=weekPlan[d];
-    html+=`<div class="week-col"><div class="week-col-head">${d}<br><span style="opacity:.5;font-size:9px">${s.duration}min · ${s.location==='home'?'🏠':'🏋️'}</span></div>`;
+    html+=`<div class="week-col">
+      <div class="week-col-head">${d}<br><span style="opacity:.5;font-size:9px">${s.duration}min · ${s.location==='home'?'🏠':'🏋️'}</span></div>`;
     PATS.forEach(p=>{
       const isCpd=s.compounds.includes(p.id);
       const isAcc=s.accessories.includes(p.id);
-      if(!isCpd&&!isAcc) return;
-      html+=`<div class="week-row ${isCpd?'wcpd':'wacc'}"><span>${p.name}</span><span class="wbadge ${isCpd?'wbadge-c':'wbadge-a'}">${isCpd?'C':'A'}</span></div>`;
+      if(isCpd){
+        html+=`<div class="week-row wcpd"><span>${p.name}</span><span class="wbadge wbadge-c">CPD</span></div>`;
+      } else if(isAcc){
+        html+=`<div class="week-row wacc"><span>${p.name}</span><span class="wbadge wbadge-a">ACC</span></div>`;
+      } else {
+        html+=`<div class="week-row" style="opacity:.25;color:var(--text3)"><span>${p.name}</span></div>`;
+      }
     });
     html+=`</div>`;
   });
@@ -704,13 +710,30 @@ function rollDice(){
 
   // Random exercises for each pattern
   s.exercises={};
-  [...s.compounds,...s.accessories].forEach(patId=>{
+  function randFrom(arr){return arr[Math.floor(Math.random()*arr.length)];}
+  function randTwo(arr){
+    if(arr.length===0) return [];
+    if(arr.length===1) return [arr[0]];
+    const shuffled=[...arr].sort(()=>Math.random()-.5);
+    return [shuffled[0],shuffled[1]]; // guaranteed different since shuffled
+  }
+  // Compound patterns: pick 2 DIFFERENT exercises at random
+  s.compounds.forEach(patId=>{
     const p=PATS.find(x=>x.id===patId);
     const exList=getExList(p,s.location);
-    if(exList.length){
-      const pick=exList[Math.floor(Math.random()*exList.length)];
-      s.exercises[patId]=[pick];
-    }
+    if(!exList.length) return;
+    const shuffled=[...exList].sort(()=>Math.random()-.5);
+    // Take first 2 from shuffled — always different since array contains unique entries
+    s.exercises[patId]=exList.length>=2?[shuffled[0],shuffled[1]]:[shuffled[0]];
+  });
+  // Accessory patterns: pick 1 random exercise (different from compound picks if same pattern pool)
+  s.accessories.forEach(patId=>{
+    const p=PATS.find(x=>x.id===patId);
+    const exList=getExList(p,s.location);
+    if(!exList.length) return;
+    // Pick a random index that is not index 0 if list is long enough
+    const idx=exList.length>1?Math.floor(Math.random()*exList.length):0;
+    s.exercises[patId]=[exList[idx]];
   });
 
   buildCpdPills();buildAccPills();renderPatternCards();
@@ -810,12 +833,15 @@ function renderPatternCards(){
       const subCount=s.exercises[id]?.length||1;
       for(let i=0;i<subCount;i++){
         const savedEx=Array.isArray(s.exercises[id])?s.exercises[id][i]:null;
-        body+=buildSubExBlock(id,i,opts,defSets,savedEx);
+        // Build options with saved value pre-selected
+        const optsEx=exList.map(e=>`<option value="${e}"${e===savedEx?' selected':''}>${e}</option>`).join('');
+        body+=buildSubExBlock(id,i,optsEx,defSets,savedEx);
       }
       if(subCount<3) body+=`<button class="add-ex-btn" id="add-btn-${id}" onclick="addSubEx('${id}')">+ Exercice (max 3)</button>`;
     } else {
       const savedEx=Array.isArray(s.exercises[id])?s.exercises[id][0]:null;
-      body+=`<div class="acc-ex-row"><select id="ex-${id}" onchange="checkBilateral('${id}','acc')">${opts}</select></div>`;
+      const optsEx=exList.map(e=>`<option value="${e}"${e===savedEx?' selected':''}>${e}</option>`).join('');
+      body+=`<div class="acc-ex-row"><select id="ex-${id}" onchange="checkBilateral('${id}','acc')">${optsEx}</select></div>`;
       body+=buildSetsHtml(id,'acc',defSets,false);
     }
 
