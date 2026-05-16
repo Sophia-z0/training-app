@@ -986,8 +986,8 @@ function renderPatternCards(){
       updateSetsGrid(id,'acc',false);
     }
   });
-  // Auto-detect bilateral exercises on render
-  checkAllBilateral();
+  // Auto-detect bilateral exercises on render (after DOM settles)
+  setTimeout(()=>checkAllBilateral(), 0);
 }
 
 function buildSubExBlock(patId,idx,opts,defSets,savedEx){
@@ -1052,7 +1052,16 @@ function refreshSetsGrid(patId,suffix){
   const p=PATS.find(x=>x.id===patId);
   const selId=suffix==='acc'?`ex-${patId}`:`ex-${patId}-${suffix}`;
   const sel=document.getElementById(selId);
-  const exName=sel?.value||'';
+  // Try DOM select first, fall back to state (useful right after render)
+  let exName=sel?.value||'';
+  if(!exName){
+    const s=dayState(currentDay);
+    const exArr=s.exercises[patId];
+    if(Array.isArray(exArr)){
+      const idx=suffix==='acc'?0:(typeof suffix==='number'?suffix:0);
+      exName=exArr[idx]||'';
+    }
+  }
   const n=parseInt(document.getElementById('sets-'+patId)?.value)||3;
   const bil=p&&isBilateral(p,exName);
   grid.innerHTML=setsRowsHtml(patId,String(suffix),n,bil);
@@ -1452,10 +1461,12 @@ initSupabase();
 loadWeekPlan();
 buildDayStrip();
 renderDayPlanner();
-// Auto-pull week plan from Supabase on load
-if(supabaseUrl&&supabaseKey){
-  pullWeekPlan().then(()=>{buildDayStrip();renderDayPlanner();});
-}
+// Auto-pull on load - use setTimeout so initSupabase has time to set keys from localStorage
+setTimeout(()=>{
+  if(supabaseUrl&&supabaseKey){
+    pullAndRefresh();
+  }
+}, 300);
 </script>
 </body>
 </html>
