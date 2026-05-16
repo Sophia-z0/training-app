@@ -412,14 +412,14 @@ const PATS = [
   { id:'lunge', name:'Lunge', num:'03',
     home:['Fentes marchées','Fentes arrière','Fentes avant','Bulgarian split squat','Fentes latérales','Fentes croisées','Pistol squat','Skater squat','Loaded step-up','Fente arrière glissée','Fente latérale glissée'],
     gym: ['Fentes marchées','Fentes arrière','Fentes avant','Bulgarian split squat','Fentes latérales','Fentes croisées','Pistol squat','Skater squat','Loaded step-up','Fente arrière glissée','Fente latérale glissée','Box step-over'],
-    bilateral:true,
-    bilateralExs:['Fentes marchées','Fentes arrière','Fentes avant','Bulgarian split squat','Fentes latérales','Fentes croisées','Pistol squat','Skater squat','Loaded step-up','Fente arrière glissée','Fente latérale glissée','Box step-over'] },
+    bilateral:false,
+    bilateralExs:['Fentes arrière','Fentes avant','Bulgarian split squat','Fentes latérales','Fentes croisées','Pistol squat','Skater squat','Loaded step-up','Fente arrière glissée','Fente latérale glissée','Box step-over'] },
 
   { id:'push-v', name:'Push vertical', num:'04a',
     home:['Standing DB press','Half-kneeling press','Tall-kneeling press','Élévations latérales','Élévations frontales','Cuban press','Y-raise','Plate halo','Handstand push-up'],
     gym: ['Standing DB press','Half-kneeling press','Tall-kneeling press','Élévations latérales','Élévations frontales','Cuban press','Y-raise','Plate halo','Handstand push-up','Standing barbell strict press','Seated barbell press','Développé poussé','Épaulé-jeté / Jerk'],
     bilateral:false,
-    bilateralExs:['Élévations latérales','Élévations frontales','Half-kneeling press'] },
+    bilateralExs:['Half-kneeling press'] },
 
   { id:'push-h', name:'Push horizontal', num:'04b',
     home:['Pompes','Pompes déclinées','Pompes diamant','Pompes archer','Développé couché au sol','Développé haltères','Banded press','Dips'],
@@ -440,7 +440,8 @@ const PATS = [
   { id:'rot', name:'Rotation / Anti-rot.', num:'06',
     home:['Russian twist','Rotational slam','Windshield wiper','Bird dog','Dead bug','Plank shoulder tap','Renegade row','Body saw','Stir the pot'],
     gym: ['Russian twist','Rotational slam','Windshield wiper','Bird dog','Dead bug','Plank shoulder tap','Renegade row','Body saw','Stir the pot','Cable wood chop','High to low chop','Low to high lift','Standing cable rotation','Landmine rainbow','Pallof press','Pallof iso hold'],
-    bilateral:false },
+    bilateral:false,
+    bilateralExs:['Renegade row'] },
 
   { id:'carry', name:'Carry', num:'07',
     home:['Farmer carry','Suitcase carry','Front-rack carry','Overhead carry','Waiter walk','Sandbag bear-hug carry','Zercher carry'],
@@ -453,7 +454,7 @@ const BONUS_HOME = [
   'Marche latérale élastique','Clamshell','Side-lying abduction',
   'Calf raises','Descente contrôlée','Renfo tibial',
   'Rotation interne épaule','Rotation externe épaule',
-  'Band pull-apart','Push-up scapulaire','Traction scapulaire'
+  'Band pull-apart','Push-up scapulaire'
 ];
 const BONUS_GYM = [
   'Machine abducteurs','Abduction poulie','Marche latérale élastique','Clamshell','Side-lying abduction',
@@ -968,9 +969,9 @@ function renderPatternCards(){
       <div class="pat-head" onclick="toggleCard('body-${id}','chev-${id}')">
         <span class="p-num">${p.num}</span><span class="p-name">${p.name}</span>
         <span class="badge ${isCpd?'badge-cpd':'badge-acc'}">${isCpd?'Compound':'Accessory'}</span>
-        <span class="chev" id="chev-${id}">↓</span>
+        <span class="chev" id="chev-${id}" style="transform:rotate(180deg)">↓</span>
       </div>
-      <div class="pat-body" id="body-${id}">${body}</div>
+      <div class="pat-body on" id="body-${id}">${body}</div>
     </div>`;
   }).join('');
 
@@ -985,6 +986,8 @@ function renderPatternCards(){
       updateSetsGrid(id,'acc',false);
     }
   });
+  // Auto-detect bilateral exercises on render
+  checkAllBilateral();
 }
 
 function buildSubExBlock(patId,idx,opts,defSets,savedEx){
@@ -1031,29 +1034,32 @@ function switchSide(patId,suffix,side){
   }
 }
 
-function checkBilateral(patId,suffix){
-  const sel=document.getElementById(`ex-${patId}-${suffix==='acc'?patId:patId+'-'+suffix}`)||document.getElementById(`ex-${patId}`);
-  const exName=sel?.value||'';
-  const p=PATS.find(x=>x.id===patId);
-  const biWrap=document.getElementById(`bilateral-wrap-${patId}-${suffix}`);
-  if(!p||!biWrap) return;
-  const bil=isBilateral(p,exName);
-  const setsContainer=document.getElementById(`setsgrid-${patId}-${suffix}`);
-
-  if(bil){
-    // Show bilateral toggle
-    biWrap.innerHTML=`<div class="bilateral-row">
-      <input type="checkbox" class="bilateral-chk" id="bilchk-${patId}-${suffix}" onchange="toggleBilateral('${patId}','${suffix}')">
-      <label class="bilateral-lbl" for="bilchk-${patId}-${suffix}">Enregistrer Gauche / Droite séparément</label>
-    </div>`;
-  } else {
-    biWrap.innerHTML='';
-    // Restore simple grid if it was bilateral
-    if(setsContainer) {
-      const n=parseInt(document.getElementById('sets-'+patId)?.value)||3;
-      setsContainer.innerHTML=setsRowsHtml(patId,suffix,n);
+function checkAllBilateral(){
+  const s=dayState(currentDay);
+  [...s.compounds,...s.accessories].forEach(patId=>{
+    const isCpd=s.compounds.includes(patId);
+    if(isCpd){
+      const count=s.exercises[patId]?.length||1;
+      for(let i=0;i<count;i++) refreshSetsGrid(patId,i);
+    } else {
+      refreshSetsGrid(patId,'acc');
     }
-  }
+  });
+}
+function refreshSetsGrid(patId,suffix){
+  const grid=document.getElementById(`setsgrid-${patId}-${suffix}`);
+  if(!grid) return;
+  const p=PATS.find(x=>x.id===patId);
+  const selId=suffix==='acc'?`ex-${patId}`:`ex-${patId}-${suffix}`;
+  const sel=document.getElementById(selId);
+  const exName=sel?.value||'';
+  const n=parseInt(document.getElementById('sets-'+patId)?.value)||3;
+  const bil=p&&isBilateral(p,exName);
+  grid.innerHTML=setsRowsHtml(patId,String(suffix),n,bil);
+}
+function checkBilateral(patId,suffix){
+  // Simplified: just refresh the sets grid with bilateral detection
+  refreshSetsGrid(patId,suffix);
 }
 
 function toggleBilateral(patId,suffix){
@@ -1070,21 +1076,33 @@ function toggleBilateral(patId,suffix){
   }
 }
 
-function setsRowsHtml(patId,suffix,n){
-  return Array.from({length:n},(_,i)=>`
-    <div class="set-row">
+function setsRowsHtml(patId,suffix,n,bilateral){
+  return Array.from({length:n},(_,i)=>{
+    if(bilateral){
+      return `<div class="set-row" style="flex-wrap:wrap;gap:4px">
+        <span class="set-n">Série ${i+1}</span>
+        <span class="set-x" style="font-size:10px;color:var(--blue);font-weight:500">G</span>
+        <input type="number" id="reps-${patId}-${suffix}-L-${i}" placeholder="reps" min="0" max="100">
+        <input type="number" id="kg-${patId}-${suffix}-L-${i}" placeholder="kg" min="0" max="999" step="0.5">
+        <span class="set-x" style="font-size:10px;color:var(--text3)">kg</span>
+        <span class="set-x" style="font-size:10px;color:var(--accent);font-weight:500;margin-left:4px">D</span>
+        <input type="number" id="reps-${patId}-${suffix}-R-${i}" placeholder="reps" min="0" max="100">
+        <input type="number" id="kg-${patId}-${suffix}-R-${i}" placeholder="kg" min="0" max="999" step="0.5">
+        <span class="set-x" style="font-size:10px;color:var(--text3)">kg</span>
+      </div>`;
+    }
+    return `<div class="set-row">
       <span class="set-n">Série ${i+1}</span>
       <input type="number" id="reps-${patId}-${suffix}-${i}" placeholder="reps" min="0" max="100">
       <span class="set-x">×</span>
       <input type="number" id="kg-${patId}-${suffix}-${i}" placeholder="kg" min="0" max="999" step="0.5">
       <span class="set-x" style="font-size:10px;color:var(--text3)">kg</span>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 function updateSetsGrid(patId,suffix,forceBilateral){
-  const n=parseInt(document.getElementById('sets-'+patId)?.value)||3;
-  const el=document.getElementById(`setsgrid-${patId}-${suffix}`);
-  if(el) el.innerHTML=setsRowsHtml(patId,String(suffix),n);
+  refreshSetsGrid(patId,suffix);
 }
 
 function updateAllSets(patId){
@@ -1133,15 +1151,34 @@ function removeSubEx(patId,idx){
 }
 
 // ═══════════════ BONUS ═══════════════
+const BONUS_BILATERAL=['Clamshell','Side-lying abduction','Rotation interne épaule','Rotation externe épaule'];
 function renderBonus(){
   const s=dayState(currentDay);
   const grid=document.getElementById('bonus-grid');
   const bonusExs=s.bonusExs||[];
-  grid.innerHTML=bonusExs.map((ex,i)=>`
-    <div class="bonus-ex-row" id="bonus-row-${i}">
-      <select id="bonus-ex-${i}">${getBonusExs().map(e=>`<option value="${e}"${e===ex?' selected':''}>${e}</option>`).join('')}</select>
-      <button class="rm-btn" onclick="removeBonus(${i})">×</button>
-    </div>`).join('');
+  const inp=`font-size:12px;padding:4px 6px;border:1px solid var(--border2);border-radius:var(--radius-s);font-family:var(--mono);text-align:center`;
+  grid.innerHTML=bonusExs.map((ex,i)=>{
+    const isBil=BONUS_BILATERAL.includes(ex);
+    return `<div id="bonus-row-${i}" style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-s);padding:10px;margin-bottom:6px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <select id="bonus-ex-${i}" onchange="updateBonusEx(${i},this.value)" style="flex:1;font-size:12px;padding:4px 7px;border:1px solid var(--border2);border-radius:var(--radius-s);background:var(--surface);color:var(--text);font-family:var(--sans)">${getBonusExs().map(e=>`<option value="${e}"${e===ex?' selected':''}>${e}</option>`).join('')}</select>
+        <button class="rm-btn" onclick="removeBonus(${i})">×</button>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+        <span style="font-size:11px;color:var(--text3);width:44px;flex-shrink:0">Séries</span>
+        <input type="number" id="bonus-sets-${i}" placeholder="3" min="1" max="5" style="width:48px;${inp}">
+        ${isBil ? `
+        <span style="font-size:11px;color:var(--blue);font-weight:500;margin-left:8px">G reps</span>
+        <input type="number" id="bonus-reps-${i}-L" placeholder="reps" min="0" max="100" style="width:52px;${inp}">
+        <span style="font-size:11px;color:var(--accent);font-weight:500;margin-left:4px">D reps</span>
+        <input type="number" id="bonus-reps-${i}-R" placeholder="reps" min="0" max="100" style="width:52px;${inp}">
+        ` : `
+        <span style="font-size:11px;color:var(--text3);margin-left:8px">Reps</span>
+        <input type="number" id="bonus-reps-${i}" placeholder="reps" min="0" max="100" style="width:52px;${inp}">
+        `}
+      </div>
+    </div>`;
+  }).join('');
   const btn=document.getElementById('add-bonus-btn');
   btn.disabled=bonusExs.length>=3;
 }
@@ -1152,6 +1189,15 @@ function addBonus(){
   s.bonusExs.push(getBonusExs()[0]);
   renderBonus();
 }
+function updateBonusEx(i,val){
+  const s=dayState(currentDay);
+  if(!s.bonusExs) return;
+  s.bonusExs[i]=val;
+  // Only re-render if bilateral status changed (to show/hide G/D fields)
+  const wasBil=document.getElementById(`bonus-reps-${i}-L`)!==null;
+  const isBil=BONUS_BILATERAL.includes(val);
+  if(wasBil!==isBil) renderBonus();
+}
 function removeBonus(i){
   const s=dayState(currentDay);
   s.bonusExs.splice(i,1);
@@ -1160,9 +1206,9 @@ function removeBonus(i){
 
 // ═══════════════ SAVE SESSION ═══════════════
 function readSets(patId,suffix,n){
-  // Check if bilateral
-  const biChk=document.getElementById(`bilchk-${patId}-${suffix}`);
-  const bilateral=biChk?.checked;
+  // Detect bilateral by checking if G/D inputs exist
+  const testL=document.getElementById(`reps-${patId}-${suffix}-L-0`);
+  const bilateral=!!testL;
   if(bilateral){
     const L=Array.from({length:n},(_,i)=>({
       reps:parseInt(document.getElementById(`reps-${patId}-${suffix}-L-${i}`)?.value)||0,
@@ -1210,7 +1256,16 @@ function saveSession(){
   // Bonus
   const bonusExs=(s.bonusExs||[]).map((ex,i)=>{
     const sel=document.getElementById(`bonus-ex-${i}`);
-    return sel?.value||ex;
+    const name=sel?.value||ex;
+    const isBil=BONUS_BILATERAL.includes(name);
+    const sets=parseInt(document.getElementById(`bonus-sets-${i}`)?.value)||0;
+    if(isBil){
+      return {name, bilateral:true, sets,
+        left:parseInt(document.getElementById(`bonus-reps-${i}-L`)?.value)||0,
+        right:parseInt(document.getElementById(`bonus-reps-${i}-R`)?.value)||0};
+    }
+    return {name, bilateral:false, sets,
+      reps:parseInt(document.getElementById(`bonus-reps-${i}`)?.value)||0};
   });
 
   const session={
@@ -1271,7 +1326,7 @@ function renderLog(){
               ${renderSetsPills(ex.setsData)}
             `).join('')}
           </div>`).join('')}
-        ${s.bonus&&s.bonus.length?`<div class="sess-pat"><div class="sess-pat-name">Préhab <span class="badge badge-bonus">Bonus</span></div><div class="sess-ex">${s.bonus.join(' · ')}</div></div>`:''}
+        ${s.bonus&&s.bonus.length?`<div class="sess-pat"><div class="sess-pat-name">Préhab <span class="badge badge-bonus">Bonus</span></div>${s.bonus.map(b=>typeof b==='string'?`<div class="sess-ex">${b}</div>`:`<div class="sess-ex">${b.name} — ${b.sets||'?'} séries${b.bilateral?` · G:${b.left}r / D:${b.right}r`:` · ${b.reps||'?'}r`}</div>`).join('')}</div>`:''}
         ${s.notes?`<div class="sess-notes">💬 ${s.notes}</div>`:''}
       </div>
     </div>`;
