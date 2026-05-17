@@ -696,7 +696,6 @@ function buildDayStrip(){
     return `<button class="day-btn${d===currentDay?' on':''}" onclick="selectDay('${d}')">${d.slice(0,3)}${dot}</button>`;
   }).join('');
   html+=`<button class="week-view-btn" onclick="showWeekView()">Semaine →</button>`;
-  html+=`<button class="week-view-btn" onclick="showWeekView()">Semaine →</button>`;
 html+=`<button class="week-view-btn" style="background:var(--accent-l);border-color:var(--accent);color:var(--accent)" onclick="clearWeekPlan()">✕ Clear</button>`; el.innerHTML=html  
 }
 function selectDay(d){currentDay=d;buildDayStrip();renderDayPlanner();}
