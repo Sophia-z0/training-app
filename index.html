@@ -696,7 +696,8 @@ function buildDayStrip(){
     return `<button class="day-btn${d===currentDay?' on':''}" onclick="selectDay('${d}')">${d.slice(0,3)}${dot}</button>`;
   }).join('');
   html+=`<button class="week-view-btn" onclick="showWeekView()">Semaine →</button>`;
-  el.innerHTML=html;
+  html+=`<button class="week-view-btn" onclick="showWeekView()">Semaine →</button>`;
+html+=`<button class="week-view-btn" style="background:var(--accent-l);border-color:var(--accent);color:var(--accent)" onclick="clearWeekPlan()">✕ Clear</button>`; el.innerHTML=html  
 }
 function selectDay(d){currentDay=d;buildDayStrip();renderDayPlanner();}
 
@@ -1070,6 +1071,16 @@ function savePlanState(){
   saveWeekPlan();
   if(supabaseUrl) pushWeekPlan();
 }
+  // ═══════════════ CLEAR WEEK ═══════════════
+  function clearWeekPlan(){
+  if(!confirm('Effacer le planning de la semaine ? (L\'historique des séances enregistrées est conservé)')) return;
+  weekPlan={};
+  localStorage.removeItem('7pat-weekplan');
+  if(supabaseUrl) pushWeekPlan();
+  buildDayStrip();
+  renderDayPlanner();
+  toast('Planning effacé ✓');
+}
 function saveExerciseChoice(patId,suffix,val){
   const s=dayState(currentDay);
   if(suffix==='acc'){
@@ -1106,11 +1117,11 @@ function setsRowsHtml(patId,suffix,n,bilateral){
     if(bilateral){
       return `<div class="set-row" style="flex-wrap:wrap;gap:4px">
         <span class="set-n">Série ${i+1}</span>
-        <span class="set-x" style="font-size:10px;color:var(--blue);font-weight:500">G</span>
+        <span class="set-x" style="font-size:10px;color:var(--accent);font-weight:500">G</span>
         <input type="number" id="reps-${patId}-${suffix}-L-${i}" placeholder="reps" min="0" max="100">
         <input type="number" id="kg-${patId}-${suffix}-L-${i}" placeholder="kg" min="0" max="999" step="0.5">
         <span class="set-x" style="font-size:10px;color:var(--text3)">kg</span>
-        <span class="set-x" style="font-size:10px;color:var(--accent);font-weight:500;margin-left:4px">D</span>
+        <span class="set-x" style="font-size:10px;color:var(--blue);font-weight:500;margin-left:4px">D</span>
         <input type="number" id="reps-${patId}-${suffix}-R-${i}" placeholder="reps" min="0" max="100">
         <input type="number" id="kg-${patId}-${suffix}-R-${i}" placeholder="kg" min="0" max="999" step="0.5">
         <span class="set-x" style="font-size:10px;color:var(--text3)">kg</span>
@@ -1176,7 +1187,7 @@ function removeSubEx(patId,idx){
 }
 
 // ═══════════════ BONUS ═══════════════
-const BONUS_BILATERAL=['Clamshell','Side-lying abduction','Rotation interne épaule','Rotation externe épaule'];
+const BONUS_BILATERAL=['Clamshell','Side-lying abduction','Rotation interne épaule','Rotation externe épaule','Marche latérale élastique','Descente contrôlée'];
 function renderBonus(){
   const s=dayState(currentDay);
   const grid=document.getElementById('bonus-grid');
@@ -1193,9 +1204,9 @@ function renderBonus(){
         <span style="font-size:11px;color:var(--text3);width:44px;flex-shrink:0">Séries</span>
         <input type="number" id="bonus-sets-${i}" placeholder="3" min="1" max="5" style="width:48px;${inp}">
         ${isBil ? `
-        <span style="font-size:11px;color:var(--blue);font-weight:500;margin-left:8px">G reps</span>
+        <span style="font-size:11px;color:var(--accent);font-weight:500;margin-left:8px">G reps</span>
         <input type="number" id="bonus-reps-${i}-L" placeholder="reps" min="0" max="100" style="width:52px;${inp}">
-        <span style="font-size:11px;color:var(--accent);font-weight:500;margin-left:4px">D reps</span>
+        <span style="font-size:11px;color:var(--blue);font-weight:500;margin-left:4px">D reps</span>
         <input type="number" id="bonus-reps-${i}-R" placeholder="reps" min="0" max="100" style="width:52px;${inp}">
         ` : `
         <span style="font-size:11px;color:var(--text3);margin-left:8px">Reps</span>
