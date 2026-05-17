@@ -698,7 +698,12 @@ function buildDayStrip(){
   html+=`<button class="week-view-btn" onclick="showWeekView()">Semaine →</button>`;
 html+=`<button class="week-view-btn" style="background:var(--accent-l);border-color:var(--accent);color:var(--accent)" onclick="clearWeekPlan()">✕ Clear</button>`; el.innerHTML=html  
 }
-function selectDay(d){currentDay=d;buildDayStrip();renderDayPlanner();}
+function selectDay(d){
+  currentDay=d;
+  hideWeekView();
+  buildDayStrip();
+  renderDayPlanner();
+}
 
 // ═══════════════ WEEK VIEW ═══════════════
 function showWeekView(){
